@@ -37,8 +37,11 @@ struct Value {
 // ============================================================
 enum class Op {
     ICONST, ILOAD, ISTORE,
-    IADD, ISUB, IMUL,
-    IF_ICMPGT, GOTO,
+    IADD, ISUB, IMUL, IDIV,
+    // 条件跳转一族(对应真实 JVM 的 if_icmp{eq,ne,lt,ge,gt,le}):
+    // 弹出 b、a(a 先入栈),按比较关系成立则跳转到 arg 指定地址
+    IF_ICMPEQ, IF_ICMPNE, IF_ICMPLT, IF_ICMPGE, IF_ICMPGT, IF_ICMPLE,
+    GOTO,
     INVOKESTATIC,
     IRETURN, RETURN,
     NEW, GETFIELD, PUTFIELD,
@@ -230,7 +233,15 @@ public:
             case Op::IADD: { int b = f.pop().i, a = f.pop().i; f.push(Value::Int(a + b)); } break;
             case Op::ISUB: { int b = f.pop().i, a = f.pop().i; f.push(Value::Int(a - b)); } break;
             case Op::IMUL: { int b = f.pop().i, a = f.pop().i; f.push(Value::Int(a * b)); } break;
-            case Op::IF_ICMPGT: { int b = f.pop().i, a = f.pop().i; if (a > b) f.pc = in.arg; } break;
+            case Op::IDIV: { int b = f.pop().i, a = f.pop().i;
+                if (b == 0) throw std::runtime_error("除零异常(idiv)");
+                f.push(Value::Int(a / b)); } break;
+            case Op::IF_ICMPEQ: { int b = f.pop().i, a = f.pop().i; if (a == b) f.pc = in.arg; } break;
+            case Op::IF_ICMPNE: { int b = f.pop().i, a = f.pop().i; if (a != b) f.pc = in.arg; } break;
+            case Op::IF_ICMPLT: { int b = f.pop().i, a = f.pop().i; if (a <  b) f.pc = in.arg; } break;
+            case Op::IF_ICMPGE: { int b = f.pop().i, a = f.pop().i; if (a >= b) f.pc = in.arg; } break;
+            case Op::IF_ICMPGT: { int b = f.pop().i, a = f.pop().i; if (a >  b) f.pc = in.arg; } break;
+            case Op::IF_ICMPLE: { int b = f.pop().i, a = f.pop().i; if (a <= b) f.pc = in.arg; } break;
             case Op::GOTO: f.pc = in.arg; break;
             case Op::INVOKESTATIC: {
                 Method& m = methods[in.resolved];       // 用【解析后的直接引用】
@@ -290,7 +301,13 @@ class ClassLoader {
         if (s == "iadd")         return Op::IADD;
         if (s == "isub")         return Op::ISUB;
         if (s == "imul")         return Op::IMUL;
+        if (s == "idiv")         return Op::IDIV;
+        if (s == "if_icmpeq")    return Op::IF_ICMPEQ;
+        if (s == "if_icmpne")    return Op::IF_ICMPNE;
+        if (s == "if_icmplt")    return Op::IF_ICMPLT;
+        if (s == "if_icmpge")    return Op::IF_ICMPGE;
         if (s == "if_icmpgt")    return Op::IF_ICMPGT;
+        if (s == "if_icmple")    return Op::IF_ICMPLE;
         if (s == "goto")         return Op::GOTO;
         if (s == "invokestatic") return Op::INVOKESTATIC;
         if (s == "ireturn")      return Op::IRETURN;
@@ -362,7 +379,9 @@ public:
                 case Op::ICONST: case Op::ILOAD: case Op::ISTORE: {
                     int v; ss >> v; in.arg = v;
                 } break;
-                case Op::IF_ICMPGT: case Op::GOTO: {
+                case Op::IF_ICMPEQ: case Op::IF_ICMPNE: case Op::IF_ICMPLT:
+                case Op::IF_ICMPGE: case Op::IF_ICMPGT: case Op::IF_ICMPLE:
+                case Op::GOTO: {
                     std::string label; ss >> label;   // 跳转目标是标签,稍后回填
                     pendingJumps.emplace_back(curIdx, (int)cur->code.size(), label);
                 } break;

@@ -16,14 +16,17 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "构建类型" FORCE)
 endif()
 
-# 可执行目标
+# 可执行目标:mini_jvm(虚拟机)与 mjc(编译器)
 add_executable(mini_jvm mini_jvm.cpp)
+add_executable(mjc mjc.cpp)
 
 # 打开常用告警(MSVC 用 /W4,其余用 -Wall -Wextra)
 if(MSVC)
     target_compile_options(mini_jvm PRIVATE /W4 /utf-8)
+    target_compile_options(mjc      PRIVATE /W4 /utf-8)
 else()
     target_compile_options(mini_jvm PRIVATE -Wall -Wextra)
+    target_compile_options(mjc      PRIVATE -Wall -Wextra)
 endif()
 
 # 把文本 class 文件拷到可执行文件旁边,方便默认路径加载
@@ -37,3 +40,10 @@ add_custom_target(run
     COMMAND mini_jvm
     DEPENDS mini_jvm
     COMMENT "运行 mini-JVM")
+
+# 全链路演示:源码(.mj) --mjc--> 字节码(.mjvm) --mini_jvm--> 执行
+add_custom_target(demo
+    COMMAND mjc ${CMAKE_SOURCE_DIR}/program.mj $<TARGET_FILE_DIR:mini_jvm>/program.mjvm
+    COMMAND mini_jvm $<TARGET_FILE_DIR:mini_jvm>/program.mjvm
+    DEPENDS mjc mini_jvm
+    COMMENT "编译 program.mj 并在 mini-JVM 上执行")
