@@ -1,0 +1,73 @@
+; program.mjvm —— mini-JVM 的文本"class 文件"
+; 由 VM 的"类加载子系统"在启动时解析、链接后执行。
+; 注意:指令里写的是【符号】(方法名 factorial、类名 Counter、字段名 Counter.count),
+;       它们先进常量池,链接阶段再"解析"成直接引用(方法下标/类下标/字段下标)。
+; 语法:  ; 开头是注释;  .class/.field/.method/.end 是指示符;  Lxx: 是跳转标签。
+
+.class Counter
+  .field count
+.end
+
+; static int factorial(int n) {
+;     if (n > 1) return n * factorial(n - 1);
+;     else       return 1;
+; }
+.method factorial args=1 locals=1
+    iload 0
+    iconst 1
+    if_icmpgt REC        ; n > 1 ? 跳到递归分支
+    iconst 1             ; 否则 return 1
+    ireturn
+REC:
+    iload 0
+    iload 0
+    iconst 1
+    isub                 ; n - 1
+    invokestatic factorial   ; 符号引用:方法名,链接时解析成方法下标
+    imul                 ; n * factorial(n-1)
+    ireturn
+.end
+
+; static void main() {
+;     Counter keeper = new Counter(); keeper.count = 42;  // GC 根,始终可达
+;     print factorial(5);                                  // 递归演示
+;     for (i = 0; i < 5; i++) { new Counter(); /*丢弃*/ }  // 制造垃圾
+;     gc();                                                // keeper 存活,5 个垃圾被回收
+;     print keeper.count;                                  // 证明 keeper 完好 = 42
+; }
+.method main args=0 locals=2
+    new Counter          ; 符号引用:类名 -> 链接解析成类下标
+    dup
+    iconst 42
+    putfield Counter.count   ; 符号引用:字段 -> 链接解析成字段下标
+    istore 0             ; local0 = keeper
+
+    iconst 5
+    invokestatic factorial
+    print
+    pop
+
+    iconst 0             ; i = 0
+    istore 1
+LOOP:
+    iconst 5
+    iload 1
+    if_icmpgt BODY       ; 5 > i ? 进循环体
+    goto END
+BODY:
+    new Counter          ; 造垃圾:new 完就丢
+    pop
+    iload 1
+    iconst 1
+    iadd
+    istore 1             ; i++
+    goto LOOP
+END:
+    gc                   ; 触发垃圾回收
+
+    iload 0
+    getfield Counter.count
+    print
+    pop
+    return
+.end
